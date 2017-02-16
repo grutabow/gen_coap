@@ -23,8 +23,8 @@
 
 -define(EXCHANGE_LIFETIME, 247000).
 
-start_link(Channel, Uri) ->
-    gen_server:start_link(?MODULE, [Channel, Uri], []).
+start_link(Channel, {Prefix, Module, Args}) ->
+    gen_server:start_link(?MODULE, [Channel, {Prefix, Module, Args}], []).
 
 notify(Uri, Resource) ->
     case pg2:get_members({coap_observer, Uri}) of
@@ -32,16 +32,11 @@ notify(Uri, Resource) ->
         List -> [gen_server:cast(Pid, Resource) || Pid <- List]
     end.
 
-init([Channel, Uri]) ->
-    % the receiver will be determined based on the URI
-    case coap_server_registry:get_handler(Uri) of
-        {Prefix, Module, Args} ->
-            Channel ! {responder_started},
-            {ok, #state{channel=Channel, prefix=Prefix, module=Module, args=Args,
-                insegs=orddict:new(), obseq=0}};
-        undefined ->
-            {stop, not_found}
-    end.
+init([Channel, {Prefix, Module, Args}]) ->
+    Channel ! {responder_started},
+    {ok, #state{channel=Channel, prefix=Prefix, module=Module, args=Args,
+        insegs=orddict:new(), obseq=0}}.
+
 
 handle_call(_Msg, _From, State) ->
     {reply, unknown_command, State}.
