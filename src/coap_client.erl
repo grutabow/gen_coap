@@ -10,34 +10,54 @@
 % convenience functions for building CoAP clients
 -module(coap_client).
 
--export([ping/1, request/2, request/3, request/4, ack/2]).
--export([resolve_uri/1, await_response/5]).
+-export([ping/2, request/3, request/4, request/5, ack/2]).
+-export([resolve_uri/1, await_response/5, open_udp/2, close_udp/1, open_dtls/2, close_dtls/1]).
+
+-record(channel_ctx, {sock, channel_pid, peer, scheme}).
 
 -include("coap.hrl").
 
-ping(Uri) ->
+open_udp(Host, Port) ->
+    {ok, Sock} = coap_udp_socket:start_link(),
+    {ok, Channel} = coap_udp_socket:get_channel(Sock, {Host, Port}),
+    #channel_ctx{sock = Sock, channel_pid = Channel, peer = {Host, Port}, scheme=coap}.
+
+close_udp(#channel_ctx{sock = Sock, channel_pid = ChannelPid}) ->
+    coap_channel:close(ChannelPid),
+    coap_udp_socket:close(Sock).
+
+
+open_dtls(Host, Port) ->
+    {ok, Sock, Channel} = coap_dtls_socket:connect(Host, Port),
+    #channel_ctx{sock = Sock, channel_pid = Channel, peer = {Host, Port}, scheme=coaps}.
+
+close_dtls(#channel_ctx{sock = Sock, channel_pid = ChannelPid}) ->
+    coap_channel:close(ChannelPid),
+    coap_dtls_socket:close(Sock).
+
+ping(#channel_ctx{channel_pid = ChannelPid, peer = ChId, scheme = Scheme}, Uri) ->
     {Scheme, ChId, _Path, _Query} = resolve_uri(Uri),
-    channel_apply(Scheme, ChId,
-        fun(Channel) ->
-            {ok, Ref} = coap_channel:ping(Channel),
-            case await_response(Channel, undefined, [], Ref, <<>>) of
-                {error, reset} -> ok;
-                _Else -> error
-            end
-        end).
+    channel_apply(  ChannelPid,
+                    fun(Channel) ->
+                        {ok, Ref} = coap_channel:ping(Channel),
+                        case await_response(Channel, undefined, [], Ref, <<>>) of
+                            {error, reset} -> ok;
+                            _Else -> error
+                        end
+                    end).
 
-request(Method, Uri) ->
-    request(Method, Uri, #coap_content{}, []).
+request(ChCtx, Method, Uri) ->
+    request(ChCtx, Method, Uri, #coap_content{}, []).
 
-request(Method, Uri, Content) ->
-    request(Method, Uri, Content, []).
+request(ChCtx, Method, Uri, Content) ->
+    request(ChCtx, Method, Uri, Content, []).
 
-request(Method, Uri, Content, Options) ->
+request(#channel_ctx{peer = ChId, scheme = Scheme, channel_pid = ChannelPid}, Method, Uri, Content, Options) ->
     {Scheme, ChId, Path, Query} = resolve_uri(Uri),
-    channel_apply(Scheme, ChId,
-        fun(Channel) ->
-            request_block(Channel, Method, [{uri_path, Path}, {uri_query, Query} | Options], Content)
-        end).
+    channel_apply(  ChannelPid,
+                    fun(Channel) ->
+                        request_block(Channel, Method, [{uri_path, Path}, {uri_query, Query} | Options], Content)
+                    end).
 
 request_block(Channel, Method, ROpt, Content) ->
     request_block(Channel, Method, ROpt, undefined, Content).
@@ -114,24 +134,10 @@ split_segments(Path, Char, Acc) ->
 make_segment(Seg) ->
     list_to_binary(http_uri:decode(Seg)).
 
-channel_apply(coap, ChId, Fun) ->
-    {ok, Sock} = coap_udp_socket:start_link(),
-    {ok, Channel} = coap_udp_socket:get_channel(Sock, ChId),
-    % send and receive
-    Res = apply(Fun, [Channel]),
-    % terminate the processes
-    coap_channel:close(Channel),
-    coap_udp_socket:close(Sock),
-    Res;
+channel_apply(ChannelPid, Fun) ->
+    apply(Fun, [ChannelPid]).
 
-channel_apply(coaps, {Host, Port}, Fun) ->
-    {ok, Sock, Channel} = coap_dtls_socket:connect(Host, Port),
-    % send and receive
-    Res = apply(Fun, [Channel]),
-    % terminate the processes
-    coap_channel:close(Channel),
-    coap_dtls_socket:close(Sock),
-    Res.
+
 
 -include_lib("eunit/include/eunit.hrl").
 
