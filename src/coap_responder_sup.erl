@@ -10,32 +10,27 @@
 -module(coap_responder_sup).
 -behaviour(supervisor).
 
--export([start_link/0, get_responder/3, init/1]).
+-export([start_link/0, get_responder/2, init/1]).
 
 -include("coap.hrl").
 
 start_link() ->
     supervisor:start_link(?MODULE, []).
 
-get_responder(SupPid, ChId, Request) ->
-    case start_responder(SupPid, ChId, Request) of
+get_responder(SupPid, Request) ->
+    case start_responder(SupPid, Request) of
         {ok, Pid} -> {ok, Pid};
         {error, {already_started, Pid}} -> {ok, Pid};
         {error, Other} -> {error, Other}
     end.
 
-start_responder(SupPid, ChId, #coap_message{method=Method, options=Options}) ->
+start_responder(SupPid, #coap_message{method=Method, options=Options}) ->
     Uri = proplists:get_value(uri_path, Options, []),
-    case coap_server_registry:get_handler(Uri) of
-        {Prefix, Module, Args} ->
-            supervisor:start_child(SupPid,
-                {{ChId, Prefix},
-                    {coap_responder, start_link, [self(), {Prefix, Module, Args}]},
-                    temporary, 5000, worker, []});
-        undefined ->
-            {error, not_found}
-    end.
-
+    Query = proplists:get_value(uri_query, Options, []),
+    supervisor:start_child(SupPid,
+        {{Method, Uri, Query},
+            {coap_responder, start_link, [self(), Uri]},
+            temporary, 5000, worker, []}).
 
 init([]) ->
     {ok, {{one_for_one, 3, 10}, []}}.
