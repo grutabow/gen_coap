@@ -20,7 +20,8 @@
 open_udp(Host, Port) ->
     {ok, Sock} = coap_udp_socket:start_link(),
     {ok, Channel} = coap_udp_socket:get_channel(Sock, {Host, Port}),
-    #channel_ctx{sock = Sock, channel_pid = Channel, peer = {Host, Port}, scheme=coap}.
+    {ok, PeerIP} = inet:getaddr(Host, inet),
+    #channel_ctx{sock = Sock, channel_pid = Channel, peer = {PeerIP, Port}, scheme=coap}.
 
 close_udp(#channel_ctx{sock = Sock, channel_pid = ChannelPid}) ->
     coap_channel:close(ChannelPid),
@@ -53,11 +54,15 @@ request(ChCtx, Method, Uri, Content) ->
     request(ChCtx, Method, Uri, Content, []).
 
 request(#channel_ctx{peer = ChId, scheme = Scheme, channel_pid = ChannelPid}, Method, Uri, Content, Options) ->
-    {Scheme, ChId, Path, Query} = resolve_uri(Uri),
-    channel_apply(  ChannelPid,
-                    fun(Channel) ->
-                        request_block(Channel, Method, [{uri_path, Path}, {uri_query, Query} | Options], Content)
-                    end).
+    case resolve_uri(Uri) of
+        {Scheme, ChId, Path, Query} ->
+            channel_apply(  ChannelPid,
+                            fun(Channel) ->
+                                request_block(Channel, Method, [{uri_path, Path}, {uri_query, Query} | Options], Content)
+                            end);
+        {SchemeDiff, ChIdDiff, _, _} ->
+            error(lists:flatten(io_lib:format("scheme (~p vs ~p) or ChId (~p vs ~p) does not match with socket", [Scheme, SchemeDiff, ChId, ChIdDiff])))
+    end.
 
 request_block(Channel, Method, ROpt, Content) ->
     request_block(Channel, Method, ROpt, undefined, Content).
