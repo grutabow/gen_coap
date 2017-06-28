@@ -18,9 +18,9 @@
 -include("coap.hrl").
 
 open_udp(Host, Port) ->
-    {ok, Sock} = coap_udp_socket:start_link(),
-    {ok, Channel} = coap_udp_socket:get_channel(Sock, {Host, Port}),
     {ok, PeerIP} = inet:getaddr(Host, inet),
+    {ok, Sock} = coap_udp_socket:start_link(),
+    {ok, Channel} = coap_udp_socket:get_channel(Sock, {PeerIP, Port}),
     #channel_ctx{sock = Sock, channel_pid = Channel, peer = {PeerIP, Port}, scheme=coap}.
 
 close_udp(#channel_ctx{sock = Sock, channel_pid = ChannelPid}) ->
