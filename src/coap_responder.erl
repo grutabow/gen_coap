@@ -63,8 +63,7 @@ handle_info(cache_expired, State=#state{observer=undefined}) ->
 handle_info(cache_expired, State) ->
     % multi-block cache expired, but the observer is still active
     {noreply, State};
-handle_info(_Info, State=#state{observer=undefined}) ->
-    {noreply, State};
+
 handle_info({coap_ack, _ChId, _Channel, Ref},
         State=#state{module=Module, obstate=ObState}) ->
     case invoke_callback(Module, coap_ack, [Ref, ObState]) of
@@ -337,7 +336,7 @@ send_response(Ref, Response=#coap_message{options=Options},
                     set_timeout(?EXCHANGE_LIFETIME, State);
                 _Else ->
                     % no further communication concerning this request
-                    {stop, normal, State}
+                    {noreply, State}
             end
     end.
 
