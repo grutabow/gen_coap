@@ -79,8 +79,8 @@ handle_info(Info, State=#state{module=Module, observer=Observer, obstate=ObState
             return_resource(Ref, Observer, {ok, content}, Resource, State#state{obstate=ObState2});
         {notify, Ref, {error, Code}, ObState2} ->
             return_response(Ref, Observer, {error, Code}, <<>>, State#state{obstate=ObState2});
-        {send_request, Request} ->
-            send_request(Channel, [], Request),
+        {send_request, Request, Ref3} ->
+            send_request(Channel, Ref3, Request),
             {noreply, State};
         {noreply, ObState2} ->
             {noreply, State#state{obstate=ObState2}};
