@@ -223,8 +223,14 @@ handle_ack(_Message, #state{cid=ChId, channel=Channel, receiver={Sender, Ref}}) 
     Sender ! {coap_ack, ChId, Channel, Ref},
     ok.
 
-request_complete(_Channel, #coap_message{}) ->
-    ok.
+request_complete(Channel, #coap_message{token=Token, options=Options}) ->
+    case proplists:get_value(observe, Options, []) of
+        [] ->
+            Channel ! {request_complete, Token},
+            ok;
+        _Else ->
+            ok
+    end.
 
 % start the timer
 next_state(Phase, State=#state{channel=Channel, tid=TrId, timer=undefined}, Timeout) ->
